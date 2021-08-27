@@ -1,9 +1,12 @@
 import os, codecs, requests, sys
 import subprocess, threading
+
 from time import sleep
-import psutil,json
-from pymongo import MongoClient
 from datetime import datetime, timedelta
+
+import psutil, json
+from pymongo import MongoClient
+
 
 class LogRequest:
     def __init__(self, syncid):
@@ -37,39 +40,54 @@ class LogRequest:
         self.moderationMSG = boolean
 
 
+def check_of_chatterino():
+    for process_ifc in psutil.process_iter():
+        if "chatterino.exe" == process_ifc.name():
+            return "Info: Chatterino обнаружен.", 1
+    return "Info: Chatterino не обнаружен.", 0
 
 
-
-def chatterino_func():
+def chatterino_call():
     subprocess.call(f"{path_to_chatterino}chatterino.exe")
 
 
 constants = {'Accept': 'application/vnd.twitchtv.v5+json',
              'Client-ID': 'gp762nuuoqcoxypju8c569th9wz7q5'}
 
+#
+
 loop = True
-timedelta_from_UTC = timedelta(hours=4)
+
 connect_string = "localhost:27017"
 mongodb = MongoClient(connect_string)
 db = mongodb["main"]
+
+timedelta_from_UTC = timedelta(hours=4)
+
 config_dict = json.load(open("config.json"))
+
+preStartInfo = []
+preStartExceptions = []
+following_streamers = []
 
 path_to_chatterino = config_dict["chatterino_folder"]
 path_to_logs = os.getenv('APPDATA') + "\\Chatterino2\\Logs\\Twitch\\Channels\\"
+path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
 
-for proc in psutil.process_iter():
-    if "chatterino.exe" == proc.name():
-        print("Info: Chatterino обнаружен.")
-        break
+#
+
+result_check_of_chatterino = check_of_chatterino()
+
+if check_of_chatterino()[1] == 1:
+    preStartInfo.append(result_check_of_chatterino[0])
 else:
     if os.path.exists(path_to_chatterino):
-        print("Info: Chatterino не обнаружен, запускаем.")
-        chatterino_thread = threading.Thread(target=chatterino_func)
+        preStartInfo.append("Info: Chatterino не обнаружен, запускаем.")
+        chatterino_thread = threading.Thread(target=chatterino_call)
         chatterino_thread.start()
 
     else:
-        print("Exception: Неправильный путь к папке Chatterino, отключаюсь.")
-        loop = False
+        preStartExceptions.append("Exception: Неправильный путь к папке Chatterino.")
 
 
 def checkdb_streams(channel_name):
@@ -230,25 +248,36 @@ def checkdb_messages(_streamer_logs, _streamer):
 
 
 if not os.path.exists(path_to_logs):
-    loop = False
-    print(f"Не найдена папка логов, отключаюсь.")
+    preStartExceptions.append("Exception: Не найдена папка логов.")
 
 streamerlist = {}
-
-for stremaer in [i for i in os.listdir(path_to_logs)]:
-    if stremaer != "live":
+with open(path_to_settings, "r") as file:
+    for streamer_ifc in json.load(file)['windows'][0]["tabs"]:
+        stremaer = streamer_ifc["splits2"]["data"]["name"]
+        following_streamers.append(stremaer)
         if db["streamers"].find_one({"name": stremaer}) is None:
             addtodb_streamer(stremaer, *(getstreamerinfo(stremaer))[:-1])
 
 for fromdb in list(db["streamers"].find({})):
     streamerlist[fromdb["name"]] = {"last_log": fromdb["last_log"], "last_line": fromdb["last_line"]}
 
-while loop:
+if preStartExceptions:
+    for Exception_ifc in preStartExceptions:
+        print(Exception_ifc)
+    print("fatal: Запуcк невозможен.")
+    loop = False
+elif not preStartExceptions and preStartInfo:
+    for Info_ifc in preStartInfo:
+        print(Info_ifc)
+    print(f"info: Собираем логи от: {', '.join(following_streamers)}.")
+    print("starting: Запуcкем...")
     sleep(10)
+while loop:
+
     # Чекируем стримеров, стримы и сообщения.
     print("(|======================================================================================================|)")
     for streamer in streamerlist:
-
+        sleep(1)
         # Streamers
         stream_state, log_state, streamer_state = "", "", ""
         streamer_info = getstreamerinfo(streamer)
@@ -277,5 +306,3 @@ while loop:
         print(f"{time_now} : {log_state} {streamer_state} {stream_state}")
 
     # Чекируем флаг на сервере.
-
-
