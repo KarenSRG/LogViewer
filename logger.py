@@ -47,47 +47,12 @@ def check_of_chatterino():
     return "Info: Chatterino не обнаружен.", 0
 
 
-def chatterino_call():
-    subprocess.call(f"{path_to_chatterino}chatterino.exe")
+def run_chatterino():
+    def sub_func():
+        subprocess.call(f"{path_to_chatterino}chatterino.exe")
 
-
-constants = {'Accept': 'application/vnd.twitchtv.v5+json',
-             'Client-ID': 'gp762nuuoqcoxypju8c569th9wz7q5'}
-
-#
-
-loop = True
-
-connect_string = "localhost:27017"
-mongodb = MongoClient(connect_string)
-db = mongodb["main"]
-
-timedelta_from_UTC = timedelta(hours=4)
-
-config_dict = json.load(open("config.json"))
-
-preStartInfo = []
-preStartExceptions = []
-following_streamers = []
-
-path_to_chatterino = config_dict["chatterino_folder"]
-path_to_logs = os.getenv('APPDATA') + "\\Chatterino2\\Logs\\Twitch\\Channels\\"
-path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
-
-#
-
-result_check_of_chatterino = check_of_chatterino()
-
-if check_of_chatterino()[1] == 1:
-    preStartInfo.append(result_check_of_chatterino[0])
-else:
-    if os.path.exists(path_to_chatterino):
-        preStartInfo.append("Info: Chatterino не обнаружен, запускаем.")
-        chatterino_thread = threading.Thread(target=chatterino_call)
-        chatterino_thread.start()
-
-    else:
-        preStartExceptions.append("Exception: Неправильный путь к папке Chatterino.")
+    chatterino_thread = threading.Thread(target=sub_func)
+    chatterino_thread.start()
 
 
 def checkdb_streams(channel_name):
@@ -190,10 +155,12 @@ def addtodb_messages(_streamer_logs, _streamer):
     last_log_line = streamerlist[_streamer]["last_line"]
     log_file = codecs.open(log_path, "r", "utf_8_sig")
     new_logs = log_file.readlines()[last_log_line:]
+    rows_added = 0
     if len(new_logs) != 0:
         for log_line in new_logs:
+            streamerlist[_streamer]["last_line"] += 1
             if log_line[0] != "#" and len(log_line.split()) > 2:
-                streamerlist[_streamer]["last_line"] += 1
+                rows_added += 1
                 if ":" not in log_line[12:]:
                     is_moderation = True
                     user = log_line.split()[1]
@@ -227,8 +194,8 @@ def addtodb_messages(_streamer_logs, _streamer):
 
         else:
             log_file.close()
-            if streamerlist[_streamer]['last_line'] - last_log_line != 0:
-                return f"{streamerlist[_streamer]['last_line'] - last_log_line} строк(а) добавлено в базу данных."
+            if rows_added != 0:
+                return f"{rows_added} строк(а) добавлено в базу данных."
             return "пока нечего читать."
 
     log_file.close()
@@ -246,6 +213,43 @@ def checkdb_messages(_streamer_logs, _streamer):
     else:
         return f"Читаем логи {_streamer}.", 1
 
+
+constants = {'Accept': 'application/vnd.twitchtv.v5+json',
+             'Client-ID': 'gp762nuuoqcoxypju8c569th9wz7q5'}
+
+#
+
+loop = True
+
+connect_string = "localhost:27017"
+mongodb = MongoClient(connect_string)
+db = mongodb["main"]
+
+timedelta_from_UTC = timedelta(hours=4)
+
+config_dict = json.load(open("config.json"))
+
+preStartInfo = []
+preStartExceptions = []
+following_streamers = []
+
+path_to_chatterino = config_dict["chatterino_folder"]
+path_to_logs = os.getenv('APPDATA') + "\\Chatterino2\\Logs\\Twitch\\Channels\\"
+path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
+
+#
+
+result_check_of_chatterino = check_of_chatterino()
+
+if check_of_chatterino()[1] == 1:
+    preStartInfo.append(result_check_of_chatterino[0])
+else:
+    if os.path.exists(path_to_chatterino):
+        preStartInfo.append("Info: Chatterino не обнаружен, запускаем.")
+        run_chatterino()
+
+    else:
+        preStartExceptions.append("Exception: Неправильный путь к папке Chatterino.")
 
 if not os.path.exists(path_to_logs):
     preStartExceptions.append("Exception: Не найдена папка логов.")
