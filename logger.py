@@ -212,7 +212,7 @@ def checkdb_messages(_streamer_logs, _streamer):
 constants = {'Accept': 'application/vnd.twitchtv.v5+json',
              'Client-ID': 'gp762nuuoqcoxypju8c569th9wz7q5'}
 
-#
+##
 
 loop = True
 
