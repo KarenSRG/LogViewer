@@ -110,14 +110,18 @@ def addtodb_streamer(channel_name, _id, status):
         "name": channel_name,
         "id": _id,
         "status": status,
-        "last_log": "",
-        "last_line": 0})
+        "logfiles": {}})
+    streamer_logs_ = path_to_logs + channel_name + "\\"
+    list_of_logs = [os.path.join(streamer_logs_, i) for i in os.listdir(streamer_logs_)]
+    for logfile in sorted(list_of_logs, key=os.path.getmtime):
+        print(streamerlist[channel_name]["logfiles"])
+        streamerlist[channel_name]["logfiles"][logfile] = 0
+
 
 
 def checkdb_streamer(channel_name, _id, status):
     streamer_inf = db["streamers"].find_one({"name": channel_name})
-    last_log_now = streamerlist[channel_name]["last_log"]
-    last_line_now = streamerlist[channel_name]["last_line"]
+    last_logfiles = streamerlist[channel_name]["logfiles"]
 
     if streamer_inf is None:
         addtodb_streamer(channel_name, _id, status)
@@ -127,87 +131,78 @@ def checkdb_streamer(channel_name, _id, status):
         db["streamers"].update_one({"name": channel_name}, {"$set": {"status": status}})
         return f"Обновляем статус у {channel_name} в базе данных."
 
-    if streamer_inf["last_log"] != last_log_now:
-        db["streamers"].update_one({"name": channel_name}, {"$set": {"last_log": last_log_now}})
-
-    if streamer_inf["last_line"] != last_line_now:
-        db["streamers"].update_one({"name": channel_name}, {"$set": {"last_line": last_line_now}})
+    if streamer_inf["logfiles"] != last_logfiles:
+        db["streamers"].update_one({"name": channel_name}, {"$set": {"logfiles": last_logfiles}})
 
     return 1
 
 
-def getinfo_lastlog(_streamer_logs, _streamer):
-    list_of_logs = [os.path.join(_streamer_logs, i) for i in os.listdir(_streamer_logs)]
-    readed_log = streamerlist[_streamer]["last_log"]
-    streamerlist[_streamer]["last_log"] = sorted(list_of_logs, key=os.path.getmtime)[-1]
-    if streamerlist[_streamer]["last_log"] != readed_log:
-        streamerlist[_streamer]["last_line"] = 0
-        return f"Найден новый лог-файл.", 1
-    return "пока нечего читать.", 0
+def addtodb_message(log_line, _streamer, log_date):
+    if log_line[0] != "#" and len(log_line.split()) > 2:
+        if ":" not in log_line[12:]:
+            is_moderation = True
+            user = log_line.split()[1]
+            body = log_line.split(user)[1]
+        else:
+            is_moderation = False
+            user = log_line[12:].split(":")[0]
+            body = log_line[12:].split(":")[1][1:]
+    else:
+        return "Exception"
+
+    logline_time = log_line.split("]")[0][1:]
+    date = (datetime.fromisoformat(f"{log_date}T{logline_time}Z") - timedelta_from_UTC).replace(microsecond=0)
+    stream_id = "offline"
+    last_stream = db["streams"].find_one({"streamer": _streamer})
+    if last_stream:
+        if last_stream["finished_at"] == "":
+            stream_id = last_stream["id"]
+
+    mentions = [word for word in body.split() if "@" in word]
+
+    if body.endswith('\n'):
+        body = body[:-1]
+    db[_streamer].insert_one({
+        "date": f"{date}Z",
+        "user": user,
+        "mentions": mentions,
+        "body": body,
+        "stream_id": stream_id,
+        "moderationMSG": is_moderation})
 
 
-def addtodb_messages(_streamer_logs, _streamer):
-    log_path = streamerlist[_streamer]["last_log"]
-    if log_path == '':
-        getinfo_lastlog(_streamer_logs, _streamer)
-        log_path = streamerlist[_streamer]["last_log"]
-    log_date = log_path.split(_streamer)[-1][1:11]
-    last_log_line = streamerlist[_streamer]["last_line"]
-    log_file = codecs.open(log_path, "r", "utf_8_sig")
-    new_logs = log_file.readlines()[last_log_line:]
+def getinfo_lastlog(_streamer_logs, _streamer, last_logfile=""):
     rows_added = 0
-    if len(new_logs) != 0:
-        for log_line in new_logs:
-            streamerlist[_streamer]["last_line"] += 1
-            if log_line[0] != "#" and len(log_line.split()) > 2:
-                rows_added += 1
-                if ":" not in log_line[12:]:
-                    is_moderation = True
-                    user = log_line.split()[1]
-                    body = log_line.split(user)[1]
-                else:
-                    is_moderation = False
-                    user = log_line[12:].split(":")[0]
-                    body = log_line[12:].split(":")[1][1:]
-            else:
-                continue
-
-            logline_time = log_line.split("]")[0][1:]
-            date = (datetime.fromisoformat(f"{log_date}T{logline_time}") - timedelta_from_UTC).replace(microsecond=0)
-            stream_id = "offline"
-            last_stream = db["streams"].find_one({"streamer": _streamer})
-            if last_stream:
-                if last_stream["finished_at"] == "":
-                    stream_id = last_stream["id"]
-
-            mentions = [word for word in body.split() if "@" in word]
-
-            if body.endswith('\n'):
-                body = body[:-1]
-            db[_streamer].insert_one({
-                "date": date,
-                "user": user,
-                "mentions": mentions,
-                "body": body,
-                "stream_id": stream_id,
-                "moderationMSG": is_moderation})
+    for logfile in streamerlist[_streamer]["logfiles"].keys():
+        logline = streamerlist[_streamer]["logfiles"][logfile]
+        log_file = codecs.open(logfile, "r", "utf_8_sig")
+        loglines = log_file.readlines()
+        if len(loglines) > logline:
+            log_date = logfile.split(_streamer)[-1][1:11]
+            for log_line in loglines[logline:]:
+                if addtodb_message(log_line, _streamer, log_date) != "Exception":
+                    rows_added += 1
 
         else:
-            log_file.close()
-            if rows_added != 0:
-                return f"{rows_added} строк(а) добавлено в базу данных."
-            return "пока нечего читать."
+            streamerlist[_streamer]["logfiles"][logfile] = "Finished"
+        streamerlist[_streamer]["logfiles"][logfile] = len(loglines)
+        last_logfile = logfile
 
-    log_file.close()
-    loginginfo = getinfo_lastlog(_streamer_logs, _streamer)
-    if loginginfo[1] != 1:
-        return loginginfo[0]
+    list_of_logs = [os.path.join(_streamer_logs, i) for i in os.listdir(_streamer_logs)]
+    lastest = sorted(list_of_logs, key=os.path.getmtime)[-1]
+
+    if lastest != last_logfile:
+        streamerlist[_streamer]["logfiles"][lastest] = 0
+        return f"найден новый лог-файл.", 1
+    if rows_added != 0:
+        return f"добавлено {rows_added} cтрок в базу данных."
+    return "пока нечего читать."
 
 
 def checkdb_messages(_streamer_logs, _streamer):
     if not os.path.exists(_streamer_logs) or os.listdir(_streamer_logs) == []:
         return f"Не найдены логи стримера {_streamer}, пропускаю.", 0
-    addtodb_inf = addtodb_messages(_streamer_logs, _streamer)
+    addtodb_inf = getinfo_lastlog(_streamer_logs, _streamer)
     if addtodb_inf:
         return f"Читаем логи {_streamer}, {addtodb_inf}", 1
     else:
@@ -263,7 +258,7 @@ with open(path_to_settings, "r") as file:
             addtodb_streamer(stremaer, *(getstreamerinfo(stremaer))[:-1])
 
 for fromdb in list(db["streamers"].find({})):
-    streamerlist[fromdb["name"]] = {"last_log": fromdb["last_log"], "last_line": fromdb["last_line"]}
+    streamerlist[fromdb["name"]] = {"logfiles": fromdb["logfiles"]}
 
 if preStartExceptions:
     for Exception_ifc in preStartExceptions:
