@@ -518,7 +518,7 @@ following_streamers = []
 timedelta_from_UTC = timedelta(hours=config_dict["timedelta_from_UTC"])
 
 path_to_chatterino = config_dict["chatterino_folder"]
-path_to_logs = config_dict["path_to_logs"]
+path_to_logs = config_dict["path_to_logs"] + "\\Twitch\\Channels\\"
 path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
 
 # dropcoll()
