@@ -1,3 +1,5 @@
 {
-  "chatterino_folder" : "B:\\Chatterino\\"
+  "chatterino_folder" : "D:\\Chatterino\\",
+  "timedelta_from_UTC" : 4,
+  "path_to_logs": ""
 }

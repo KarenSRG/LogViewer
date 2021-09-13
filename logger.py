@@ -1,11 +1,99 @@
 import os, codecs, requests, sys
 import subprocess, threading
 
+from pystray import MenuItem, Menu, Icon
+
 from time import sleep
 from datetime import datetime, timedelta
 
 import psutil, json
 from pymongo import MongoClient
+
+from tkinter import WORD, ttk, HORIZONTAL, VERTICAL, Label, scrolledtext, END
+from ttkthemes import ThemedTk
+from PIL import Image
+
+from bson.json_util import dumps
+
+
+class LogViewer(ThemedTk):
+    def __init__(self):
+        # Setting up Player window.
+        super().__init__(theme="equilux")
+        self.geometry("743x440")
+        self['background'] = "#464646"
+        self.title("LogViewer")
+        self.resizable(False, False)
+        self.iconbitmap('icon.ico')
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.from_label = Label(self, text="Logger's logs")
+        self.from_label['background'] = "#464646"
+        self.from_label['foreground'] = "#BEBEBE"
+
+        self.to_label = Label(self, text="Checker's logs")
+        self.to_label['background'] = "#464646"
+        self.to_label['foreground'] = "#BEBEBE"
+
+        self.hseparatorMID = ttk.Separator(self, orient=HORIZONTAL)
+        self.hseparatorBOT = ttk.Separator(self, orient=HORIZONTAL)
+        self.vseparatorLEFT = ttk.Separator(self, orient=VERTICAL)
+        self.vseparatorMID = ttk.Separator(self, orient=VERTICAL)
+        self.vseparatorRIGHT = ttk.Separator(self, orient=VERTICAL)
+        # self.progress = ttk.Progressbar(self, orient="horizontal", length=200, mode="determinate")
+        self.logger_console = scrolledtext.ScrolledText(self, wrap=WORD, width=50, height=50, font=("roobert", 9))
+        self.logger_console['background'] = "#18181b"
+        self.checker_console = scrolledtext.ScrolledText(self, wrap=WORD, width=50, height=50, font=("roobert", 9))
+        self.checker_console['background'] = "#18181b"
+        self.hseparatorMID.place(x=2, y=220, relwidth=0.995, relheight=0.03)
+        self.hseparatorBOT.place(x=2, y=437, relwidth=.995, relheight=0.03)
+        self.vseparatorLEFT.place(x=0, y=0, relwidth=0.003, relheight=0.995)
+        self.vseparatorMID.place(x=740, y=0, relwidth=0.003, relheight=0.995)
+        self.vseparatorRIGHT.place(x=857, y=0, relwidth=0.003, relheight=0.995)
+        self.from_label.place(x=10, y=5)
+        self.to_label.place(x=10, y=228)
+        self.logger_console.place(x=11, y=30, height=180, width=715)
+        self.checker_console.place(x=11, y=253, height=175, width=715)
+
+        self.logger_console.tag_config("timestamp", foreground="#4dd64f")
+        self.logger_console.tag_config("draw", foreground="#269e28")
+        self.logger_console.tag_config("log", foreground="#c8c8c8")
+        self.logger_console.tag_config("info", foreground="#0027a6")
+        self.logger_console.tag_config("starting", foreground="#0ae002")
+        self.logger_console.tag_config("fatal", foreground="#c20000")
+        self.logger_console.tag_config("exception", foreground="#d6d60d")
+
+    def print_logger(self, mess):
+        self.logger_console.configure(state='normal')
+        spltd = mess.split()
+        log = mess.split(spltd[0])[1]
+        if spltd[0] == "Info:":
+            self.logger_console.insert(END, " " + spltd[0], "info")
+            self.logger_console.insert(END, " " + log + "\n", "log")
+        elif spltd[0] == "Fatal:":
+            self.logger_console.insert(END, " " + spltd[0], "fatal")
+            self.logger_console.insert(END, " " + log + "\n", "log")
+        elif spltd[0] == "Starting:":
+            self.logger_console.insert(END, " " + spltd[0], "starting")
+            self.logger_console.insert(END, " " + log + "\n", "log")
+        elif spltd[0] == "Exception:":
+            self.logger_console.insert(END, " " + spltd[0], "exception")
+            self.logger_console.insert(END, " " + log + "\n", "log")
+        else:
+            self.logger_console.insert(END, " " + "[" + " ", "draw")
+            self.logger_console.insert(END, spltd[0][:-1], "timestamp")
+            self.logger_console.insert(END, " " + "]" + " ", "draw")
+            self.logger_console.insert(END, log + "\n", "log")
+        self.logger_console.yview(END)
+        self.logger_console.configure(state='disabled')
+
+    def print_checker(self, mess, color='#c8c8c8', mestype='logs'):
+        self.checker_console.configure(state='normal')
+        self.checker_console.tag_config(mestype, foreground=color)
+        self.checker_console.insert(END, " " + mess + "\n", mestype)
+        self.checker_console.yview(END)
+        self.checker_console.configure(state='disabled')
 
 
 class LogRequest:
@@ -19,7 +107,10 @@ class LogRequest:
         self.user = ""
         self.mentions = []
         self.moderationMSG = False
-        self.andSwitcher = False
+        self.andMode = True
+
+    def __str__(self):
+        return f"{self.streamer} {self.date_from} {self.date_to} {self.user} {self.body} {self.mentions}"
 
     def set_body(self, body):
         self.body = body
@@ -34,10 +125,200 @@ class LogRequest:
         self.user = user
 
     def set_mentions(self, mention_list):
+        if mention_list == "":
+            mention_list = []
         self.mentions = mention_list
 
     def moderation(self, boolean):
         self.moderationMSG = boolean
+
+
+def dropcoll():
+    for i in ["insize", "gandreich", "elwycco", "mooniverse", "cemka", "alcoreru", "unclebjorn", "shroud", "kal_zer",
+              "streamers", "streams"]:
+        db.drop_collection(i)
+    db.create_collection("streamers")
+    db.create_collection("streams")
+
+
+# noinspection PyUnusedLocal,PyShadowingNames
+def quit_window(icon, MenuItem):
+    global loop, checker_thread, logger_thread, chatterino_thread
+    icon.stop()
+    loop = False
+
+
+# noinspection PyUnusedLocal,PyShadowingNames
+def show_window(icon, MenuItem):
+    icon.stop()
+    gui.after(0, gui.deiconify)
+
+
+def withdraw_window():
+    gui.withdraw()
+    image = Image.open("icon.ico")
+    menu = Menu(MenuItem('Выход', quit_window), MenuItem('Открыть', show_window))
+    icon = Icon("LogViwer", image, "LogViwer", menu)
+    icon.run()
+
+
+def checker():
+    global loop, last_logChecker
+    while loop:
+        try:
+            logreqs = []
+            response = requests.get("https://cyberinquisitor414.glitch.me/LOGWIEWIERdb").json()
+            if response["whatweneed"]:
+                for req in response["whatweneed"]:
+                    last_logChecker = f"Запрос :{req}"
+                    sleep(1)
+                    rawlogreq = LogRequest(str(req["SyncID"]))
+                    rawlogreq.set_streamer(req["streamer"])
+                    rawlogreq.set_user(req["user"].lower())
+                    rawlogreq.set_date(req["dateFrom"], req["dateTo"])
+
+                    if "moderationMsg" in req:
+                        rawlogreq.moderation(True)
+
+                    if "mention" in req:
+                        rawlogreq.set_mentions(req["mention"])
+
+                    if "msgBody" in req:
+                        rawlogreq.set_body(req["msgBody"])
+
+                    logreqs.append(rawlogreq)
+
+                for logreq in logreqs:
+                    post_data = {"SyncID": logreq.syncID, "Exceptions": [], "data": {}}
+                    if logreq.streamer in db.list_collection_names():
+                        list_of_mess = list(db[logreq.streamer].find({"user": logreq.user}))
+                        if list_of_mess:
+                            timeline_mess_list = []
+                            dateFrom = datetime.strptime(f'{logreq.date_from}', "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+                                microsecond=0)
+                            dateTo = datetime.strptime(f'{logreq.date_to}', "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+                                microsecond=0)
+                            for mess in list_of_mess:
+                                mess.pop('_id')
+                                messDate = mess["date"]
+                                mess["date"] = str(mess["date"].isoformat()) + "Z"
+                                if dateFrom <= messDate <= dateTo:
+                                    timeline_mess_list.append(mess)
+                            if timeline_mess_list:
+                                mentionValid_mess_list = []
+                                if logreq.mentions:
+                                    for mess1 in timeline_mess_list:
+                                        if logreq.mentions == mess1["mentions"]:
+                                            mentionValid_mess_list.append(mess1)
+                                    if not mentionValid_mess_list and logreq.andMode:
+                                        post_data["Exceptions"].append("No matching mentions in messages.")
+                                else:
+                                    mentionValid_mess_list = timeline_mess_list
+                                wordValid_mess_list = []
+                                if logreq.andMode and mentionValid_mess_list:
+                                    if logreq.body != "":
+                                        for mess2 in mentionValid_mess_list:
+                                            if logreq.body in mess2["body"]:
+                                                wordValid_mess_list.append(mess2)
+                                    else:
+                                        wordValid_mess_list = mentionValid_mess_list
+                                    if wordValid_mess_list:
+                                        post_data["data"] = wordValid_mess_list
+
+                                    else:
+                                        post_data["Exceptions"].append(
+                                            "There are no matching words in the messages")
+                                elif not logreq.andMode and mentionValid_mess_list:
+                                    if logreq.body != "":
+                                        for mess2 in mentionValid_mess_list:
+                                            if logreq.body in mess2["body"]:
+                                                wordValid_mess_list.append(mess2)
+                                    else:
+                                        wordValid_mess_list = mentionValid_mess_list
+                                    if not wordValid_mess_list and mentionValid_mess_list:
+                                        post_data["data"] = mentionValid_mess_list
+                                        post_data["Exceptions"].append(
+                                            "There are no matching words in the messages, but there are matching mentions")
+                                    elif wordValid_mess_list and not mentionValid_mess_list:
+                                        post_data["data"] = wordValid_mess_list
+                                        post_data["Exceptions"].append(
+                                            "There are no matching mentions in the messages, but there are matching words")
+                                    elif not wordValid_mess_list and not mentionValid_mess_list:
+                                        post_data["Exceptions"].append(
+                                            "There are no matching words or mentions in the messages")
+
+                            else:
+                                post_data["Exceptions"].append("Not matching messages in this timeline.")
+                        else:
+                            post_data["Exceptions"].append("No matching messages.")
+                    else:
+                        post_data["Exceptions"].append("Streamer not in DB.")
+                    headers = {'Content-type': 'application/json'}
+                    last_logChecker = f"Ответ: {post_data}"
+                    post_req = requests.post("https://cyberinquisitor414.glitch.me/logsresponce",
+                                             json=json.loads(dumps(post_data)),
+                                             headers=headers)
+                    sleep(1)
+        except:
+            time_now = datetime.now().replace(microsecond=0).isoformat()
+            last_logChecker = f"{time_now}: В чеккере что-то отебнуло, когда читали запрос " \
+                              f"{requests.get('https://cyberinquisitor414.glitch.me/LOGWIEWIERdb').json()['whatweneed']}"
+    return
+
+
+def logger():
+    global last_logLogger, loop
+    # Чекируем стримеров, стримы и сообщения.
+    sleep(5)
+    while loop:
+        for streamer in streamerlist:
+            try:
+                sleep(2)
+                stream_state, log_state, streamer_state = "", "", ""
+                # Streams
+                stream_info = checkdb_streams(streamer)
+                if type(stream_info) != int:
+                    stream_state = stream_info
+
+                    # Streamers
+                streamer_info = getstreamerinfo(streamer)
+                if len(streamer_info) == 2:
+                    last_logLogger = f"{streamer_info[0]}\n"
+                    continue
+
+                streamer_id = streamer_info[0]
+                streamer_status = streamer_info[1]
+                streamer_db_action = checkdb_streamer(streamer, streamer_id, streamer_status)
+                if type(streamer_db_action) != int:
+                    streamer_state = streamer_db_action
+
+                # Logs
+                streamer_logs = path_to_logs + streamer + "\\"
+                logs_status = checkdb_messages(streamer_logs, streamer)
+                log_state = logs_status[0]
+                if logs_status[1] == 0:
+                    continue
+                time_now = datetime.now().replace(microsecond=0).isoformat()
+                last_logLogger = f"{time_now}: {log_state} {streamer_state} {stream_state}"
+            except:
+                time_now = datetime.now().replace(microsecond=0).isoformat()
+                last_logLogger = f"{time_now}: В логгере что-то отебнуло, когда читали логи {streamer}"
+    return
+
+
+def logs_to_console():
+    global last_logLoggerOLD, last_logLogger
+    if last_logLoggerOLD != last_logLogger:
+        gui.print_logger(last_logLogger)
+        last_logLoggerOLD = last_logLogger
+
+    global last_logCheckerOLD, last_logChecker
+    if last_logCheckerOLD != last_logChecker:
+        gui.print_checker(last_logChecker)
+        last_logCheckerOLD = last_logChecker
+    else:
+        gui.print_checker("Пока ловить нечего...")
+    gui.after(500, logs_to_console)
 
 
 def check_of_chatterino():
@@ -47,12 +328,13 @@ def check_of_chatterino():
     return "Info: Chatterino не обнаружен.", 0
 
 
-def run_chatterino():
-    def sub_func():
-        subprocess.call(f"{path_to_chatterino}chatterino.exe")
-
-    chatterino_thread = threading.Thread(target=sub_func)
-    chatterino_thread.start()
+def sub_func():
+    process = subprocess.Popen([f"{path_to_chatterino}chatterino.exe"], stdout=subprocess.DEVNULL)
+    while True:
+        if not loop:
+            process.terminate()
+            return
+        sleep(1)
 
 
 def checkdb_streams(channel_name):
@@ -80,10 +362,10 @@ def getstreamerinfo(channel_name, datatype="id+status"):
     id_req = requests.get(f'https://api.twitch.tv/kraken/users?login={channel_name}',
                           headers={'Accept': constants["Accept"], 'Client-ID': constants["Client-ID"]}).json()
     if 'error' in id_req:
-        return f"{streamer} не найден, пропускаю.", 0
+        return f"{channel_name} не найден, пропускаю.", 0
 
     if id_req['_total'] == 0:
-        return f"{streamer} не найден, пропускаю.", 0
+        return f"{channel_name} не найден, пропускаю.", 0
 
     channel_id = id_req['users'][0]['_id']
 
@@ -114,9 +396,7 @@ def addtodb_streamer(channel_name, _id, status):
     streamer_logs_ = path_to_logs + channel_name + "\\"
     list_of_logs = [os.path.join(streamer_logs_, i) for i in os.listdir(streamer_logs_)]
     for logfile in sorted(list_of_logs, key=os.path.getmtime):
-        print(streamerlist[channel_name]["logfiles"])
         streamerlist[channel_name]["logfiles"][logfile] = 0
-
 
 
 def checkdb_streamer(channel_name, _id, status):
@@ -151,7 +431,7 @@ def addtodb_message(log_line, _streamer, log_date):
         return "Exception"
 
     logline_time = log_line.split("]")[0][1:]
-    date = (datetime.fromisoformat(f"{log_date}T{logline_time}Z") - timedelta_from_UTC).replace(microsecond=0)
+    date = (datetime.fromisoformat(f"{log_date}T{logline_time}") - timedelta_from_UTC).replace(microsecond=0)
     stream_id = "offline"
     last_stream = db["streams"].find_one({"streamer": _streamer})
     if last_stream:
@@ -163,7 +443,7 @@ def addtodb_message(log_line, _streamer, log_date):
     if body.endswith('\n'):
         body = body[:-1]
     db[_streamer].insert_one({
-        "date": f"{date}Z",
+        "date": date,
         "user": user,
         "mentions": mentions,
         "body": body,
@@ -175,7 +455,7 @@ def getinfo_lastlog(_streamer_logs, _streamer, last_logfile=""):
     rows_added = 0
     for logfile in streamerlist[_streamer]["logfiles"].keys():
         logline = streamerlist[_streamer]["logfiles"][logfile]
-        log_file = codecs.open(logfile, "r", "utf_8_sig")
+        log_file = codecs.open(logfile, "r", "utf-8-sig", errors='replace')
         loglines = log_file.readlines()
         if len(loglines) > logline:
             log_date = logfile.split(_streamer)[-1][1:11]
@@ -193,7 +473,7 @@ def getinfo_lastlog(_streamer_logs, _streamer, last_logfile=""):
 
     if lastest != last_logfile:
         streamerlist[_streamer]["logfiles"][lastest] = 0
-        return f"найден новый лог-файл.", 1
+        return f"найден новый лог-файл."
     if rows_added != 0:
         return f"добавлено {rows_added} cтрок в базу данных."
     return "пока нечего читать."
@@ -209,18 +489,25 @@ def checkdb_messages(_streamer_logs, _streamer):
         return f"Читаем логи {_streamer}.", 1
 
 
+gui = LogViewer()
+
 constants = {'Accept': 'application/vnd.twitchtv.v5+json',
              'Client-ID': 'gp762nuuoqcoxypju8c569th9wz7q5'}
 
-#
-
 loop = True
+
+last_logLogger = ""
+last_logChecker = ""
+last_logLoggerOLD = ""
+last_logCheckerOLD = ""
+
+logger_thread = threading.Thread(target=logger)
+chatterino_thread = threading.Thread(target=sub_func)
+checker_thread = threading.Thread(target=checker)
 
 connect_string = "localhost:27017"
 mongodb = MongoClient(connect_string)
 db = mongodb["main"]
-
-timedelta_from_UTC = timedelta(hours=4)
 
 config_dict = json.load(open("config.json"))
 
@@ -228,12 +515,14 @@ preStartInfo = []
 preStartExceptions = []
 following_streamers = []
 
+timedelta_from_UTC = timedelta(hours=config_dict["timedelta_from_UTC"])
+
 path_to_chatterino = config_dict["chatterino_folder"]
-path_to_logs = os.getenv('APPDATA') + "\\Chatterino2\\Logs\\Twitch\\Channels\\"
+path_to_logs = config_dict["path_to_logs"]
 path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
 
-#
-
+# dropcoll()
+# sys.exit()
 result_check_of_chatterino = check_of_chatterino()
 
 if check_of_chatterino()[1] == 1:
@@ -241,7 +530,7 @@ if check_of_chatterino()[1] == 1:
 else:
     if os.path.exists(path_to_chatterino):
         preStartInfo.append("Info: Chatterino не обнаружен, запускаем.")
-        run_chatterino()
+        chatterino_thread.start()
 
     else:
         preStartExceptions.append("Exception: Неправильный путь к папке Chatterino.")
@@ -252,56 +541,33 @@ if not os.path.exists(path_to_logs):
 streamerlist = {}
 with open(path_to_settings, "r") as file:
     for streamer_ifc in json.load(file)['windows'][0]["tabs"]:
-        stremaer = streamer_ifc["splits2"]["data"]["name"]
-        following_streamers.append(stremaer)
-        if db["streamers"].find_one({"name": stremaer}) is None:
-            addtodb_streamer(stremaer, *(getstreamerinfo(stremaer))[:-1])
-
-for fromdb in list(db["streamers"].find({})):
-    streamerlist[fromdb["name"]] = {"logfiles": fromdb["logfiles"]}
-
+        if "data" in streamer_ifc["splits2"]:
+            stremaer = streamer_ifc["splits2"]["data"]["name"]
+            dbinf = db["streamers"].find_one({"name": stremaer})
+            following_streamers.append(stremaer)
+            if dbinf is None:
+                streamerlist[stremaer] = {"logfiles": {}}
+                addtodb_streamer(stremaer, *(getstreamerinfo(stremaer))[:-1])
+            else:
+                streamerlist[stremaer] = {"logfiles": dbinf["logfiles"]}
+        else:
+            preStartExceptions.append("Exception: Пустые вкладки в Chatterino.")
+            break
 if preStartExceptions:
     for Exception_ifc in preStartExceptions:
-        print(Exception_ifc)
-    print("fatal: Запуcк невозможен.")
+        gui.print_logger(Exception_ifc)
+    gui.print_logger("Fatal: Запуcк невозможен.")
     loop = False
+
 elif not preStartExceptions and preStartInfo:
     for Info_ifc in preStartInfo:
-        print(Info_ifc)
-    print(f"info: Собираем логи от: {', '.join(following_streamers)}.")
-    print("starting: Запуcкем...")
-    sleep(10)
-while loop:
+        gui.print_logger(Info_ifc)
+    gui.print_logger(f"Info: Собираем логи от: {', '.join(following_streamers)}.")
+    gui.print_logger("Starting: Запуcкем...")
 
-    # Чекируем стримеров, стримы и сообщения.
-    print("(|======================================================================================================|)")
-    for streamer in streamerlist:
-        sleep(1)
-        # Streamers
-        stream_state, log_state, streamer_state = "", "", ""
-        streamer_info = getstreamerinfo(streamer)
-        if len(streamer_info) == 2:
-            print(streamer_info[0])
-            continue
-
-        streamer_id = streamer_info[0]
-        streamer_status = streamer_info[1]
-        streamer_db_action = checkdb_streamer(streamer, streamer_id, streamer_status)
-        if type(streamer_db_action) != int:
-            streamer_state = streamer_db_action
-
-        # Streams
-        stream_info = checkdb_streams(streamer)
-        if type(stream_info) != int:
-            stream_state = stream_info
-
-        # Logs
-        streamer_logs = path_to_logs + streamer + "\\"
-        logs_status = checkdb_messages(streamer_logs, streamer)
-        log_state = logs_status[0]
-        if logs_status[1] == 0:
-            continue
-        time_now = datetime.now().replace(microsecond=0).isoformat()
-        print(f"{time_now} : {log_state} {streamer_state} {stream_state}")
-
-    # Чекируем флаг на сервере.
+if loop:
+    gui.after(500, logs_to_console)
+    logger_thread.start()
+    checker_thread.start()
+gui.protocol('WM_DELETE_WINDOW', withdraw_window)
+gui.mainloop()
