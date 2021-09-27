@@ -1,7 +1,7 @@
 {
   "chatterino_folder": "B:\\Chatterino\\",
   "timedelta_from_UTC": 4,
-  "path_to_logs": "",
+  "path_to_logs": "C:\\Users\\Karen\\AppData\\Roaming\\Chatterino2\\Logs",
   "proxy": {
     "": ""
   }

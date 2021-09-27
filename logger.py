@@ -14,6 +14,8 @@ from ttkthemes import ThemedTk
 from PIL import Image
 from bson.json_util import dumps
 
+from constants import *
+
 
 class LogViewer(ThemedTk):
     def __init__(self):
@@ -35,6 +37,14 @@ class LogViewer(ThemedTk):
         self.to_label['background'] = "#464646"
         self.to_label['foreground'] = "#BEBEBE"
 
+        self.stoplog = Label(self, text="Логгер приостановлен", font=("roobert", 15))
+        self.stoplog['background'] = "#464646"
+        self.stoplog['foreground'] = "#BEBEBE"
+
+        self.stopcheck = Label(self, text="Чеккер приостановлен", font=("roobert", 15))
+        self.stopcheck['background'] = "#464646"
+        self.stopcheck['foreground'] = "#BEBEBE"
+
         self.hseparatorTOP = ttk.Separator(self, orient=HORIZONTAL)
         self.hseparatorMID = ttk.Separator(self, orient=HORIZONTAL)
         self.hseparatorBOT = ttk.Separator(self, orient=HORIZONTAL)
@@ -46,12 +56,12 @@ class LogViewer(ThemedTk):
         self.checker_console = scrolledtext.ScrolledText(self, wrap=WORD, width=50, height=50, font=("roobert", 9))
         self.checker_console['background'] = "#18181b"
 
-        self.hseparatorMID.place(x=2, y=220, relwidth=0.995, relheight=0.03)
+        self.hseparatorMID.place(x=2, y=220, relwidth=0.995, relheight=0.01)
         self.hseparatorBOT.place(x=2, y=437, relwidth=.995, relheight=0.03)
         self.vseparatorLEFT.place(x=0, y=2, relwidth=0.003, relheight=0.994)
         self.vseparatorMID.place(x=740, y=2, relwidth=0.003, relheight=0.994)
         self.vseparatorRIGHT.place(x=857, y=2, relwidth=0.003, relheight=0.994)
-        self.hseparatorTOP.place(x=2, y=0, relwidth=0.995, relheight=0.025)
+        self.hseparatorTOP.place(x=2, y=0, relwidth=0.995, relheight=0.01)
         self.from_label.place(x=10, y=5)
         self.to_label.place(x=10, y=228)
         self.logger_console.place(x=11, y=30, height=180, width=715)
@@ -74,7 +84,7 @@ class LogViewer(ThemedTk):
         self.checker_console.tag_config("answer", foreground="#3399cc")
         self.checker_console.tag_config("exception", foreground="#d6d60d")
 
-    def print_logger(self, mess):
+    def adding_log_to_console(self, mess):
         self.logger_console.configure(state='normal')
         spltd = mess.split()
         log = mess.split(spltd[0])[1]
@@ -98,7 +108,7 @@ class LogViewer(ThemedTk):
         self.logger_console.yview(END)
         self.logger_console.configure(state='disabled')
 
-    def print_checker(self, mess):
+    def adding_check_to_console(self, mess):
         self.checker_console.configure(state='normal')
 
         messtype = mess.split("$TYPE$")[1]
@@ -130,11 +140,46 @@ class LogViewer(ThemedTk):
         self.checker_console.yview(END)
         self.checker_console.configure(state='disabled')
 
+    def print_logger(self, mess):
+        global logger_logs
+        if mess != "update":
+            if on_console != "logger" and not iconified:
+                if logger_logs:
+                    for past_mess in logger_logs:
+                        self.adding_log_to_console(past_mess)
+                    logger_logs = []
+                else:
+                    self.adding_log_to_console(mess)
+            else:
+                logger_logs.append(mess)
+        else:
+            if logger_logs:
+                for past_mess in logger_logs:
+                    self.adding_log_to_console(past_mess)
+                logger_logs = []
+
+    def print_checker(self, mess):
+        global checker_logs
+        if mess != "update":
+            if on_console != "checker":
+                if checker_logs:
+                    for past_mess in checker_logs:
+                        self.adding_check_to_console(past_mess)
+                    checker_logs = []
+                else:
+                    self.adding_check_to_console(mess)
+            else:
+                checker_logs.append(mess)
+        else:
+            if checker_logs:
+                for past_mess in checker_logs:
+                    self.adding_check_to_console(past_mess)
+                checker_logs = []
+
 
 class LogRequest:
     def __init__(self, syncid):
         self.syncID = syncid
-
         self.streamer = ""
         self.date_from = ""
         self.date_to = ""
@@ -170,30 +215,42 @@ class LogRequest:
 
 # noinspection PyUnusedLocal,PyShadowingNames
 def quit_window(icon, MenuItem):
-    global loop, checker_thread, logger_thread, chatterino_thread, gui
+    global loop, checker_thread, logger_thread, chatterino_thread, GUI
     icon.stop()
     loop = False
-    gui.destroy()
+    GUI.destroy()
 
 
 # noinspection PyUnusedLocal,PyShadowingNames
 def show_window(icon, MenuItem):
     icon.stop()
-    gui.after(0, gui.deiconify)
+    GUI.after(0, GUI.deiconify)
 
 
 def withdraw_window():
-    gui.withdraw()
+    GUI.withdraw()
     image = Image.open("icon.ico")
     menu = Menu(MenuItem('Выход', quit_window), MenuItem('Открыть', show_window))
     icon = Icon("LogViwer", image, "LogViwer", menu)
     icon.run()
 
 
+def is_mouse_on_console():
+    global on_console, GUI
+    abs_coord_x = GUI.winfo_pointerx() - GUI.winfo_rootx()
+    abs_coord_y = GUI.winfo_pointery() - GUI.winfo_rooty()
+    if 10 < abs_coord_x < 725 and 30 < abs_coord_y < 207:
+        on_console = "logger"
+    elif 10 < abs_coord_x < 725 and 255 < abs_coord_y < 425:
+        on_console = "checker"
+    else:
+        on_console = False
+
+
 def checker():
     global last_logChecker
-    while loop:
-        sleep(10)
+    while True:
+        sleep(1)
         try:
             logreqs = []
             response = requests.get("https://cyberinquisitor414.glitch.me/LOGWIEWIERdb", proxies=proxy).json()
@@ -290,20 +347,20 @@ def checker():
                         post_data["Exceptions"].append("No matching messages.")
                 else:
                     post_data["Exceptions"].append("Streamer not in DB.")
-                headers = {'Content-type': 'application/json'}
-                # requests.post("https://cyberinquisitor414.glitch.me/logsresponce",
-                #               json=json.loads(dumps(post_data)),
-                #               headers=headers, proxies=proxy)
+                requests.post("https://cyberinquisitor414.glitch.me/logsresponce",
+                              json=json.loads(dumps(post_data)),
+                              headers=headersCT, proxies=proxy)
                 time_now = datetime.now().replace(microsecond=0).isoformat()
                 last_logChecker = f"$TYPE$[Answer]$TYPE$$TIME${time_now}$TIME$" \
                                   f"$MESS$Отправлено сообшений {len(post_data['data'])}$MESS$"
+                sleep(1)
 
 
 def logger():
-    global last_logLogger, loop
+    global last_logLogger
     # Чекируем стримеров, стримы и сообщения.
     sleep(5)
-    while loop:
+    while True:
         for streamer in streamerlist:
             try:
                 sleep(2)
@@ -336,16 +393,27 @@ def logger():
 
 
 def logs_to_console():
-    global last_logLoggerOLD, last_logLogger
+    global last_logLoggerOLD, last_logLogger, last_logCheckerOLD, last_logChecker
     if last_logLoggerOLD != last_logLogger:
-        gui.print_logger(last_logLogger)
+        GUI.print_logger(last_logLogger)
         last_logLoggerOLD = last_logLogger
 
-    global last_logCheckerOLD, last_logChecker
     if last_logCheckerOLD != last_logChecker:
-        gui.print_checker(last_logChecker)
+        GUI.print_checker(last_logChecker)
         last_logCheckerOLD = last_logChecker
-    gui.after(500, logs_to_console)
+
+    is_mouse_on_console()
+    if on_console == "logger":
+        GUI.stoplog.place(x=250, y=0)
+    else:
+        GUI.print_logger("update")
+        GUI.stoplog.place_forget()
+    if on_console == "checker":
+        GUI.stopcheck.place(x=250, y=223)
+    else:
+        GUI.print_checker("update")
+        GUI.stopcheck.place_forget()
+    GUI.after(100, func=logs_to_console)
 
 
 def check_of_chatterino():
@@ -387,8 +455,7 @@ def going_offline(channel_name):
 
 def getstreamerinfo(channel_name, datatype="id+status"):
     id_req = requests.get(f'https://api.twitch.tv/kraken/users?login={channel_name}',
-                          headers={'Accept': constants["Accept"], 'Client-ID': constants["Client-ID"]},
-                          proxies=proxy).json()
+                          headers=headersAC, proxies=proxy).json()
     if 'error' in id_req:
         return f"{channel_name} не найден, пропускаю.", 0
 
@@ -399,15 +466,13 @@ def getstreamerinfo(channel_name, datatype="id+status"):
 
     if datatype == "id+status":
         status_req = requests.get(f"https://api.twitch.tv/kraken/channels/{channel_id}",
-                                  headers={'Accept': constants["Accept"], 'Client-ID': constants["Client-ID"]},
-                                  proxies=proxy).json()
+                                  headers=headersAC, proxies=proxy).json()
 
         return channel_id, status_req["status"], 1
 
     elif datatype == "streams":
         stream_req = requests.get(f"https://api.twitch.tv/kraken/streams/?channel={channel_id}",
-                                  headers={'Accept': constants["Accept"], 'Client-ID': constants["Client-ID"]},
-                                  proxies=proxy).json()
+                                  headers=headersAC, proxies=proxy).json()
         if not stream_req["streams"]:
             going_offline(channel_name)
             return f"{channel_name} в офлайне."
@@ -534,17 +599,7 @@ def checkdb_messages(_streamer_logs, _streamer):
         return f"Читаем логи {_streamer}.", 1
 
 
-gui = LogViewer()
-
-constants = {'Accept': 'application/vnd.twitchtv.v5+json',
-             'Client-ID': 'gp762nuuoqcoxypju8c569th9wz7q5'}
-
 loop = True
-
-last_logLogger = ""
-last_logChecker = ""
-last_logLoggerOLD = ""
-last_logCheckerOLD = ""
 
 logger_thread = threading.Thread(target=logger)
 chatterino_thread = threading.Thread(target=chatterino_subprocess)
@@ -553,23 +608,8 @@ logger_thread.daemon = True
 chatterino_thread.daemon = True
 checker_thread.daemon = True
 
-connect_string = "localhost:27017"
 mongodb = MongoClient(connect_string)
 db = mongodb["main"]
-
-config_dict = json.load(open("config.json"))
-
-proxy = config_dict["proxy"]
-
-preStartInfo = []
-preStartExceptions = []
-following_streamers = []
-
-timedelta_from_UTC = timedelta(hours=config_dict["timedelta_from_UTC"])
-
-path_to_chatterino = config_dict["chatterino_folder"]
-path_to_logs = config_dict["path_to_logs"] + "\\Twitch\\Channels\\"
-path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
 
 result_check_of_chatterino = check_of_chatterino()
 
@@ -585,6 +625,11 @@ else:
 
 if not os.path.exists(path_to_logs):
     preStartExceptions.append("Exception: Не найдена папка логов.")
+
+GUI = LogViewer()
+on_console = False
+iconified = False
+logger_logs, checker_logs = [], []
 
 streamerlist = {}
 with open(path_to_settings, "r") as file:
@@ -608,22 +653,22 @@ if preStartExceptions:
     for Exception_ifc in preStartExceptions:
         if "Не найдена папка с логами" not in Exception_ifc:
             fatal = True
-        gui.print_logger(Exception_ifc)
+        GUI.print_logger(Exception_ifc)
     if fatal:
-        gui.print_logger("Fatal: Запуcк невозможен.")
+        GUI.print_logger("Fatal: Запуcк невозможен.")
         loop = False
 
 elif not preStartExceptions and preStartInfo:
     for Info_ifc in preStartInfo:
-        gui.print_logger(Info_ifc)
-    gui.print_logger(f"Info: Собираем логи от: {', '.join(following_streamers)}.")
-    gui.print_logger("Starting: Запуcкаем логгер.")
-    gui.print_checker("$TYPE$Starting$TYPE$$MESS$Запускаем чеккер.$MESS$")
-    gui.print_checker("$TYPE$Info$TYPE$$MESS$Слушаем https://cyberinquisitor414.glitch.me/LOGWIEWIERdb.$MESS$")
+        GUI.print_logger(Info_ifc)
+    GUI.print_logger(f"Info: Собираем логи от: {', '.join(following_streamers)}.")
+    GUI.print_logger("Starting: Запуcкаем логгер.")
+    GUI.print_checker("$TYPE$Starting$TYPE$$MESS$Запускаем чеккер.$MESS$")
+    GUI.print_checker("$TYPE$Info$TYPE$$MESS$Слушаем https://cyberinquisitor414.glitch.me/LOGWIEWIERdb.$MESS$")
 
 if loop:
-    gui.after(500, logs_to_console)
+    GUI.after(500, func=logs_to_console)
     logger_thread.start()
     checker_thread.start()
-gui.protocol('WM_DELETE_WINDOW', withdraw_window)
-gui.mainloop()
+GUI.protocol('WM_DELETE_WINDOW', withdraw_window)
+GUI.mainloop()
