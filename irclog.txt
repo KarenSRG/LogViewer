@@ -1,0 +1,87 @@
+DEBUG:asyncio:Using proactor: IocpProactor
+DEBUG:twitchio.websocket: > PASS oauth:11f2ako2oy8ol4u7cgb6swrvg9owgw
+DEBUG:twitchio.websocket: > NICK kal_zer
+DEBUG:twitchio.websocket: > CAP REQ :twitch.tv/commands
+DEBUG:twitchio.websocket: > CAP REQ :twitch.tv/tags
+DEBUG:twitchio.websocket: > CAP REQ :twitch.tv/membership
+DEBUG:twitchio.websocket: > JOIN #kaisarg213
+DEBUG:twitchio.websocket: < :tmi.twitch.tv 001 kal_zer :Welcome, GLHF!
+:tmi.twitch.tv 002 kal_zer :Your host is tmi.twitch.tv
+:tmi.twitch.tv 003 kal_zer :This server is rather new
+:tmi.twitch.tv 004 kal_zer :-
+:tmi.twitch.tv 375 kal_zer :-
+:tmi.twitch.tv 372 kal_zer :You are in a maze of twisty passages, all alike.
+:tmi.twitch.tv 376 kal_zer :>
+:tmi.twitch.tv CAP * ACK :twitch.tv/commands
+:tmi.twitch.tv CAP * ACK :twitch.tv/tags
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+INFO:twitchio.websocket:Successfully logged onto Twitch WS: kal_zer
+DEBUG:twitchio.websocket: < :tmi.twitch.tv CAP * ACK :twitch.tv/membership
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket: < :kal_zer!kal_zer@kal_zer.tmi.twitch.tv JOIN #kaisarg213
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket: < :kal_zer.tmi.twitch.tv 353 kal_zer = #kaisarg213 :kal_zer
+:kal_zer.tmi.twitch.tv 366 kal_zer #kaisarg213 :End of /NAMES list
+@badge-info=;badges=glitchcon2020/1;color=#8A2BE2;display-name=KAl_ZER;emote-sets=0,228457,421511,444068,1392723,328598306,342960552,451877674,537206155,592920959,610186276;mod=0;subscriber=0;user-type= :tmi.twitch.tv USERSTATE #kaisarg213
+@emote-only=0;followers-only=0;r9k=0;rituals=0;room-id=729988964;slow=0;subs-only=0 :tmi.twitch.tv ROOMSTATE #kaisarg213
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket:ACTION: JOIN:: kaisarg213
+DEBUG:twitchio.websocket:Dispatching event: join
+DEBUG:twitchio.client:dispatching event join
+DEBUG:twitchio.websocket:ACTION: USERSTATE:: kaisarg213
+DEBUG:twitchio.websocket:Dispatching event: userstate
+DEBUG:twitchio.client:dispatching event userstate
+DEBUG:twitchio.websocket:Dispatching event: ready
+DEBUG:twitchio.client:dispatching event ready
+DEBUG:twitchio.websocket: < :logger771!logger771@logger771.tmi.twitch.tv JOIN #kaisarg213
+:kaisarg213!kaisarg213@kaisarg213.tmi.twitch.tv JOIN #kaisarg213
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket:ACTION: JOIN:: kaisarg213
+DEBUG:twitchio.websocket:Dispatching event: join
+DEBUG:twitchio.client:dispatching event join
+DEBUG:twitchio.websocket:ACTION: JOIN:: kaisarg213
+DEBUG:twitchio.websocket:Dispatching event: join
+DEBUG:twitchio.client:dispatching event join
+DEBUG:twitchio.websocket: < @badge-info=;badges=glitchcon2020/1;client-nonce=0d6698fef16694051da570f7db2da908;color=#8A2BE2;display-name=KAl_ZER;emotes=;flags=;id=af46a441-f3c2-474a-9ba5-f139e8657177;mod=0;room-id=729988964;subscriber=0;tmi-sent-ts=1632776467626;turbo=0;user-id=513397467;user-type= :kal_zer!kal_zer@kal_zer.tmi.twitch.tv PRIVMSG #kaisarg213 :asdasd
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket:ACTION: PRIVMSG:: kaisarg213
+DEBUG:twitchio.websocket:Dispatching event: message
+DEBUG:twitchio.client:dispatching event message
+DEBUG:twitchio.websocket: < @ban-duration=10;room-id=729988964;target-user-id=723187451;tmi-sent-ts=1632776527116 :tmi.twitch.tv CLEARCHAT #kaisarg213 :logger771
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket: < @room-id=729988964;target-user-id=723187451;tmi-sent-ts=1632776586474 :tmi.twitch.tv CLEARCHAT #kaisarg213 :logger771
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket: < PING :tmi.twitch.tv
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket:ACTION: Sending PONG reply.
+DEBUG:twitchio.websocket: > PONG :tmi.twitch.tv
+DEBUG:twitchio.websocket: < :logger771!logger771@logger771.tmi.twitch.tv PART #kaisarg213
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket:ACTION: PART:: kaisarg213
+DEBUG:twitchio.websocket: < :logger771!logger771@logger771.tmi.twitch.tv JOIN #kaisarg213
+
+DEBUG:twitchio.websocket:Dispatching event: raw_data
+DEBUG:twitchio.client:dispatching event raw_data
+DEBUG:twitchio.websocket:ACTION: JOIN:: kaisarg213
+DEBUG:twitchio.websocket:Dispatching event: join
+DEBUG:twitchio.client:dispatching event join
