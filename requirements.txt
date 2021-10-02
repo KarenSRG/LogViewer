@@ -8,3 +8,5 @@ urllib3==1.26.6
 ttkthemes~=3.2.2
 pystray~=0.17.3
 Pillow~=8.3.2
+twitchio~=2.0.6
+future~=0.18.2

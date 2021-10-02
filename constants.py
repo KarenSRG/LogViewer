@@ -12,6 +12,8 @@ config_dict = json.load(open("config.json"))
 proxy = config_dict["proxy"]
 path_to_chatterino = config_dict["chatterino_folder"]
 path_to_logs = config_dict["path_to_logs"] + "\\Twitch\\Channels\\"
+irc_bot = config_dict["irc_bot"]
+oauth_token = config_dict["oauth"]
 timedelta_from_UTC = timedelta(hours=config_dict["timedelta_from_UTC"])
 
 path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
@@ -24,7 +26,3 @@ last_logLogger = ""
 last_logChecker = ""
 last_logLoggerOLD = ""
 last_logCheckerOLD = ""
-
-
-
-
