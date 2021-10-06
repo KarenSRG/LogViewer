@@ -9,14 +9,12 @@ connect_string = "localhost:27017"
 
 config_dict = json.load(open("config.json"))
 
+streamersLogging = config_dict["streamers"]
 proxy = config_dict["proxy"]
-path_to_chatterino = config_dict["chatterino_folder"]
 path_to_logs = config_dict["path_to_logs"] + "\\Twitch\\Channels\\"
-irc_bot = config_dict["irc_bot"]
 oauth_token = config_dict["oauth"]
+bot_nick = config_dict["bot_nick"]
 timedelta_from_UTC = timedelta(hours=config_dict["timedelta_from_UTC"])
-
-path_to_settings = os.getenv('APPDATA') + "\\Chatterino2\\Settings\\window-layout.json"
 
 preStartInfo = []
 preStartExceptions = []
@@ -24,5 +22,14 @@ following_streamers = []
 
 last_logLogger = ""
 last_logChecker = ""
+
+logged_messages = {}
+logged_messagesOLD = {}
+
+for streamer in streamersLogging:
+    logged_messages[streamer] = 0
+    logged_messagesOLD[streamer] = 0
+
+
 last_logLoggerOLD = ""
 last_logCheckerOLD = ""

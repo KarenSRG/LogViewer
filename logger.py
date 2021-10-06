@@ -1,10 +1,12 @@
+﻿import asyncio
 import os, codecs, requests
-import subprocess, threading
+import threading
 
 from pystray import MenuItem, Menu, Icon
+from twitchio.ext import commands
 
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, date
 
 import psutil, json
 from pymongo import MongoClient
@@ -25,17 +27,21 @@ class LogViewer(ThemedTk):
         self['background'] = "#464646"
         self.title("LogViewer")
         self.resizable(False, False)
-        self.iconbitmap('icon.ico')
+        self.iconbitmap('adds/icon.ico')
         self.setup_ui()
 
     def setup_ui(self):
-        self.from_label = Label(self, text="Logger's logs")
-        self.from_label['background'] = "#464646"
-        self.from_label['foreground'] = "#BEBEBE"
+        self.logger_lbl = Label(self, text="Logger's logs")
+        self.logger_lbl['background'] = "#464646"
+        self.logger_lbl['foreground'] = "#BEBEBE"
 
-        self.to_label = Label(self, text="Checker's logs")
-        self.to_label['background'] = "#464646"
-        self.to_label['foreground'] = "#BEBEBE"
+        self.checker_lbl = Label(self, text="Checker's logs")
+        self.checker_lbl['background'] = "#464646"
+        self.checker_lbl['foreground'] = "#BEBEBE"
+
+        self.ircbot_lbl = Label(self, text="Bot's logs")
+        self.ircbot_lbl['background'] = "#464646"
+        self.ircbot_lbl['foreground'] = "#BEBEBE"
 
         self.stoplog = Label(self, text="Логгер приостановлен", font=("roobert", 15))
         self.stoplog['background'] = "#464646"
@@ -45,27 +51,38 @@ class LogViewer(ThemedTk):
         self.stopcheck['background'] = "#464646"
         self.stopcheck['foreground'] = "#BEBEBE"
 
+        self.stopbot = Label(self, text="Бот приостановлен", font=("roobert", 15))
+        self.stopbot['background'] = "#464646"
+        self.stopbot['foreground'] = "#BEBEBE"
+
         self.hseparatorTOP = ttk.Separator(self, orient=HORIZONTAL)
         self.hseparatorMID = ttk.Separator(self, orient=HORIZONTAL)
         self.hseparatorBOT = ttk.Separator(self, orient=HORIZONTAL)
         self.vseparatorLEFT = ttk.Separator(self, orient=VERTICAL)
         self.vseparatorMID = ttk.Separator(self, orient=VERTICAL)
         self.vseparatorRIGHT = ttk.Separator(self, orient=VERTICAL)
+
         self.logger_console = scrolledtext.ScrolledText(self, wrap=WORD, width=50, height=50, font=("roobert", 9))
         self.logger_console['background'] = "#18181b"
         self.checker_console = scrolledtext.ScrolledText(self, wrap=WORD, width=50, height=50, font=("roobert", 9))
         self.checker_console['background'] = "#18181b"
+        self.ircbot_console = scrolledtext.ScrolledText(self, wrap=WORD, width=50, height=50, font=("roobert", 9))
+        self.ircbot_console['background'] = "#18181b"
 
+        self.logger_lbl.place(x=10, y=5)
+        self.checker_lbl.place(x=10, y=228)
+        self.ircbot_lbl.place(x=378, y=228)
+
+        self.logger_console.place(x=11, y=30, height=180, width=719)
+        self.checker_console.place(x=11, y=253, height=175, width=345)
+        self.ircbot_console.place(x=379, y=253, height=175, width=351)
+
+        self.vseparatorMID.place(x=368, y=222, relwidth=0.004, relheight=0.4875)
         self.hseparatorMID.place(x=2, y=220, relwidth=0.995, relheight=0.01)
         self.hseparatorBOT.place(x=2, y=437, relwidth=.995, relheight=0.03)
         self.vseparatorLEFT.place(x=0, y=2, relwidth=0.003, relheight=0.994)
-        self.vseparatorMID.place(x=740, y=2, relwidth=0.003, relheight=0.994)
-        self.vseparatorRIGHT.place(x=857, y=2, relwidth=0.003, relheight=0.994)
+        self.vseparatorRIGHT.place(x=740, y=2, relwidth=0.003, relheight=0.994)
         self.hseparatorTOP.place(x=2, y=0, relwidth=0.995, relheight=0.01)
-        self.from_label.place(x=10, y=5)
-        self.to_label.place(x=10, y=228)
-        self.logger_console.place(x=11, y=30, height=180, width=715)
-        self.checker_console.place(x=11, y=253, height=175, width=715)
 
         self.logger_console.tag_config("timestamp", foreground="#4dd64f")
         self.logger_console.tag_config("draw", foreground="#269e28")
@@ -83,6 +100,15 @@ class LogViewer(ThemedTk):
         self.checker_console.tag_config("request", foreground="#33cccc")
         self.checker_console.tag_config("answer", foreground="#3399cc")
         self.checker_console.tag_config("exception", foreground="#d6d60d")
+
+        self.ircbot_console.tag_config("timestamp", foreground="#4dd64f")
+        self.ircbot_console.tag_config("draw", foreground="#269e28")
+        self.ircbot_console.tag_config("log", foreground="#c8c8c8")
+        self.ircbot_console.tag_config("info", foreground="#0027a6")
+        self.ircbot_console.tag_config("request", foreground="#33cccc")
+        self.ircbot_console.tag_config("starting", foreground="#0ae002")
+        self.ircbot_console.tag_config("channel", foreground="#3399cc")
+        self.ircbot_console.tag_config("exception", foreground="#d6d60d")
 
     def adding_log_to_console(self, mess):
         self.logger_console.configure(state='normal')
@@ -140,10 +166,39 @@ class LogViewer(ThemedTk):
         self.checker_console.yview(END)
         self.checker_console.configure(state='disabled')
 
+    def adding_ircbot_to_console(self, mess):
+        self.ircbot_console.configure(state='normal')
+
+        messtype = mess.split("$TYPE$")[1]
+
+        messbody = mess.split("$MESS$")[1]
+        if messtype == "Info":
+            self.ircbot_console.insert(END, " " + messtype + ":", "info")
+            self.ircbot_console.insert(END, " " + messbody + "\n", "log")
+        elif messtype == "Starting":
+            self.ircbot_console.insert(END, " " + messtype + ":", "starting")
+            self.ircbot_console.insert(END, " " + messbody + "\n", "log")
+        elif messtype == "Exception":
+            self.ircbot_console.insert(END, " " + messtype + ":", "exception")
+            self.ircbot_console.insert(END, " " + messbody + "\n", "log")
+        if "$TIME$" in mess:
+            messtime = mess.split("$TIME$")[1]
+            channel = mess.split("$CHANNEL$")[1]
+            if messtype == "[ W ]":
+                self.ircbot_console.insert(END, " " + messtype, "request")
+                self.ircbot_console.insert(END, " " + "[" + " ", "draw")
+                self.ircbot_console.insert(END, messtime, "timestamp")
+                self.ircbot_console.insert(END, " " + "]" + " ", "draw")
+                self.ircbot_console.insert(END, " " + channel, "channel")
+                self.ircbot_console.insert(END, ": " + messbody + "\n", "log")
+
+        self.ircbot_console.yview(END)
+        self.ircbot_console.configure(state='disabled')
+
     def print_logger(self, mess):
         global logger_logs
         if mess != "update":
-            if on_console != "logger" and not iconified:
+            if on_console != "logger":
                 if logger_logs:
                     for past_mess in logger_logs:
                         self.adding_log_to_console(past_mess)
@@ -175,6 +230,24 @@ class LogViewer(ThemedTk):
                 for past_mess in checker_logs:
                     self.adding_check_to_console(past_mess)
                 checker_logs = []
+
+    def print_ircbot(self, mess):
+        global ircbot_logs
+        if mess != "update":
+            if on_console != "irc_bot":
+                if ircbot_logs:
+                    for past_mess in ircbot_logs:
+                        self.adding_ircbot_to_console(past_mess)
+                    ircbot_logs = []
+                else:
+                    self.adding_ircbot_to_console(mess)
+            else:
+                ircbot_logs.append(mess)
+        else:
+            if ircbot_logs:
+                for past_mess in ircbot_logs:
+                    self.adding_ircbot_to_console(past_mess)
+                ircbot_logs = []
 
 
 class LogRequest:
@@ -213,9 +286,57 @@ class LogRequest:
         self.moderationMSG = boolean
 
 
+class Bot(commands.Bot):
+    def __init__(self):
+        super().__init__(token=oauth_token, prefix='###666@@@',
+                         initial_channels=streamersLogging)
+
+    async def event_raw_data(self, raw):
+        raw_set = raw.split(";")
+        timestamp = ""
+        if "@ban-duration" in raw_set[0]:
+            channel = raw_set[-1].split()[3]
+            username = raw_set[-1].split(channel)[1][2:]
+            duration = raw_set[0].split("=")[1]
+            for param in raw_set:
+                if "tmi-sent-ts" in param:
+                    ms = int(param.split("=")[1][:14])
+                    timestamp = datetime.fromtimestamp(ms / 1000).strftime('[%H:%M:%S]')
+            log_to_doc(channel[1:], f"{timestamp} {username[:-2]} has been timed out for {duration} seconds.\n")
+        elif "@ban-duration" not in raw_set[0] and "CLEARCHAT" in raw_set[-1]:
+            channel = raw_set[-1].split()[3]
+            username = raw_set[-1].split(channel)[1][2:]
+            for param in raw_set:
+                if "tmi-sent-ts" in param:
+                    ms = int(param.split("=")[1][:14])
+                    timestamp = datetime.fromtimestamp(ms / 1000).strftime('[%H:%M:%S]')
+            log_to_doc(channel[1:], f"{timestamp} {username[:-2]} has been permanently banned.\n")
+
+    async def event_message(self, message):
+        timestamp = str((message.timestamp + timedelta_from_UTC).replace(microsecond=0)).split()
+        log_to_doc(message.channel.name, f"[{timestamp[1]}]  {message.author.name}: {message.content}\n")
+
+
+def log_to_doc(channel, log):
+    global logged_messages
+    logged_messages[channel] += 1
+    if not os.path.exists(f"{path_to_logs}{channel}"):
+        os.mkdir(f"{path_to_logs}{channel}")
+    path = f"{path_to_logs}{channel}\\{channel}-{date.today()}.log"
+    with codecs.open(path, 'a+', encoding="utf-8", errors="replace") as file:
+        file.write(log)
+
+
+def ircbot_process():
+    loop_bot = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop_bot)
+    bot = Bot()
+    bot.run()
+
+
 # noinspection PyUnusedLocal,PyShadowingNames
 def quit_window(icon, MenuItem):
-    global loop, checker_thread, logger_thread, chatterino_thread, GUI
+    global loop, checker_thread, logger_thread, GUI
     icon.stop()
     loop = False
     GUI.destroy()
@@ -229,7 +350,7 @@ def show_window(icon, MenuItem):
 
 def withdraw_window():
     GUI.withdraw()
-    image = Image.open("icon.ico")
+    image = Image.open("adds/icon.ico")
     menu = Menu(MenuItem('Выход', quit_window), MenuItem('Открыть', show_window))
     icon = Icon("LogViwer", image, "LogViwer", menu)
     icon.run()
@@ -241,8 +362,10 @@ def is_mouse_on_console():
     abs_coord_y = GUI.winfo_pointery() - GUI.winfo_rooty()
     if 10 < abs_coord_x < 725 and 30 < abs_coord_y < 207:
         on_console = "logger"
-    elif 10 < abs_coord_x < 725 and 255 < abs_coord_y < 425:
+    elif 10 < abs_coord_x < 335 and 255 < abs_coord_y < 425:
         on_console = "checker"
+    elif 373 < abs_coord_x < 725 and 255 < abs_coord_y < 425:
+        on_console = "irc_bot"
     else:
         on_console = False
 
@@ -347,12 +470,12 @@ def checker():
                         post_data["Exceptions"].append("No matching messages.")
                 else:
                     post_data["Exceptions"].append("Streamer not in DB.")
-                requests.post("https://cyberinquisitor414.glitch.me/logsresponce",
-                              json=json.loads(dumps(post_data)),
-                              headers=headersCT, proxies=proxy)
+                # requests.post("https://cyberinquisitor414.glitch.me/logsresponce",
+                #               json=json.loads(dumps(post_data)),
+                #               headers=headersCT, proxies=proxy)
                 time_now = datetime.now().replace(microsecond=0).isoformat()
                 last_logChecker = f"$TYPE$[Answer]$TYPE$$TIME${time_now}$TIME$" \
-                                  f"$MESS$Отправлено сообшений {len(post_data['data'])}$MESS$"
+                                  f"$MESS$Сообшений: {len(post_data['data'])}$MESS$"
                 sleep(1)
 
 
@@ -393,7 +516,7 @@ def logger():
 
 
 def logs_to_console():
-    global last_logLoggerOLD, last_logLogger, last_logCheckerOLD, last_logChecker
+    global last_logLoggerOLD, last_logLogger, last_logCheckerOLD, last_logChecker, logged_messages, logged_messagesOLD
     if last_logLoggerOLD != last_logLogger:
         GUI.print_logger(last_logLogger)
         last_logLoggerOLD = last_logLogger
@@ -402,6 +525,19 @@ def logs_to_console():
         GUI.print_checker(last_logChecker)
         last_logCheckerOLD = last_logChecker
 
+    if logged_messagesOLD != logged_messages:
+        for stremaer__ in logged_messages.keys():
+            if logged_messages[stremaer__] != logged_messagesOLD[stremaer__]:
+                delta = logged_messages[stremaer__] - logged_messagesOLD[stremaer__]
+                time_now = datetime.now().replace(microsecond=0).isoformat()
+                printing = f"$TYPE$[ W ]$TYPE$" \
+                           f"$TIME${time_now}$TIME$" \
+                           f"$CHANNEL${stremaer__}$CHANNEL$:" \
+                           f"$MESS$Написано: {delta}$MESS$"
+
+                GUI.print_ircbot(printing)
+                logged_messagesOLD[stremaer__] = logged_messages[stremaer__]
+
     is_mouse_on_console()
     if on_console == "logger":
         GUI.stoplog.place(x=250, y=0)
@@ -409,27 +545,16 @@ def logs_to_console():
         GUI.print_logger("update")
         GUI.stoplog.place_forget()
     if on_console == "checker":
-        GUI.stopcheck.place(x=250, y=223)
+        GUI.stopcheck.place(x=10, y=223)
     else:
         GUI.print_checker("update")
         GUI.stopcheck.place_forget()
+    if on_console == "irc_bot":
+        GUI.stopbot.place(x=375, y=223)
+    else:
+        GUI.print_ircbot("update")
+        GUI.stopbot.place_forget()
     GUI.after(100, func=logs_to_console)
-
-
-def check_of_chatterino():
-    for process_ifc in psutil.process_iter():
-        if "chatterino.exe" == process_ifc.name():
-            return "Info: Chatterino обнаружен.", 1
-    return "Info: Chatterino не обнаружен.", 0
-
-
-def chatterino_subprocess():
-    process = subprocess.Popen([f"{path_to_chatterino}chatterino.exe"], stdout=subprocess.DEVNULL)
-    while True:
-        if not loop:
-            process.terminate()
-            return
-        sleep(1)
 
 
 def checkdb_streams(channel_name):
@@ -483,8 +608,6 @@ def getstreamerinfo(channel_name, datatype="id+status"):
 
 def addtodb_streamer(channel_name, _id, status):
     streamer_logs_ = path_to_logs + channel_name + "\\"
-    if not os.path.exists(streamer_logs_):
-        return f"Exception: Не найдена папка с логами {channel_name}"
     list_of_logs = [os.path.join(streamer_logs_, i) for i in os.listdir(streamer_logs_)]
     for logfile in sorted(list_of_logs, key=os.path.getmtime):
         streamerlist[channel_name]["logfiles"][logfile] = 0
@@ -575,10 +698,13 @@ def getinfo_lastlog(_streamer_logs, _streamer):
     if rows_skipped != 0:
         logging.append(f"пропущено строк {rows_skipped}")
     if lastests != log_files_inDB:
+        cnt = 0
         for new_logfile in lastests:
             if new_logfile not in log_files_inDB:
                 streamerlist[_streamer]["logfiles"][new_logfile] = 0
-                logging.append("найден новый лог-файл")
+                cnt += 1
+        if cnt:
+            logging.append(f"найдено новых лог-файлoв {cnt}")
     if rows_added != 0:
         if logging:
             return f"добавлено {rows_added} cтрок в базу данных, {', '.join(logging)}."
@@ -602,73 +728,62 @@ def checkdb_messages(_streamer_logs, _streamer):
 loop = True
 
 logger_thread = threading.Thread(target=logger)
-chatterino_thread = threading.Thread(target=chatterino_subprocess)
 checker_thread = threading.Thread(target=checker)
+ircbot_thread = threading.Thread(target=ircbot_process)
+ircbot_thread.daemon = True
 logger_thread.daemon = True
-chatterino_thread.daemon = True
 checker_thread.daemon = True
 
 mongodb = MongoClient(connect_string)
 db = mongodb["main"]
-
-result_check_of_chatterino = check_of_chatterino()
-
-if check_of_chatterino()[1] == 1:
-    preStartInfo.append(result_check_of_chatterino[0])
-else:
-    if os.path.exists(path_to_chatterino):
-        preStartInfo.append("Info: Chatterino не обнаружен, запускаем.")
-        chatterino_thread.start()
-
-    else:
-        preStartExceptions.append("Exception: Неправильный путь к папке Chatterino.")
 
 if not os.path.exists(path_to_logs):
     preStartExceptions.append("Exception: Не найдена папка логов.")
 
 GUI = LogViewer()
 on_console = False
-iconified = False
-logger_logs, checker_logs = [], []
+logger_logs, checker_logs, ircbot_logs = [], [], []
 
 streamerlist = {}
-with open(path_to_settings, "r") as file:
-    for streamer_ifc in json.load(file)['windows'][0]["tabs"]:
-        if "data" in streamer_ifc["splits2"]:
-            stremaer = streamer_ifc["splits2"]["data"]["name"]
-            dbinf = db["streamers"].find_one({"name": stremaer})
-            following_streamers.append(stremaer)
-            if dbinf is None:
-                streamerlist[stremaer] = {"logfiles": {}}
-                adding_status = addtodb_streamer(stremaer, *(getstreamerinfo(stremaer))[:-1])
-                if type(adding_status) is str:
-                    preStartExceptions.append(adding_status)
-            else:
-                streamerlist[stremaer] = {"logfiles": dbinf["logfiles"]}
-        else:
-            preStartExceptions.append("Exception: Пустые вкладки в Chatterino.")
-            break
+for stremaer_ in streamersLogging:
+    dbinf = db["streamers"].find_one({"name": stremaer_})
+    following_streamers.append(stremaer_)
+    if dbinf is None:
+        streamerlist[stremaer_] = {"logfiles": {}}
+        addtodb_streamer(stremaer_, *(getstreamerinfo(stremaer_))[:-1])
+    else:
+        streamerlist[stremaer_] = {"logfiles": dbinf["logfiles"]}
+
+fatal = False
 if preStartExceptions:
-    fatal = False
     for Exception_ifc in preStartExceptions:
-        if "Не найдена папка с логами" not in Exception_ifc:
-            fatal = True
+        fatal = True
         GUI.print_logger(Exception_ifc)
     if fatal:
         GUI.print_logger("Fatal: Запуcк невозможен.")
         loop = False
 
-elif not preStartExceptions and preStartInfo:
-    for Info_ifc in preStartInfo:
-        GUI.print_logger(Info_ifc)
-    GUI.print_logger(f"Info: Собираем логи от: {', '.join(following_streamers)}.")
+if not fatal:
     GUI.print_logger("Starting: Запуcкаем логгер.")
+    GUI.print_logger(f"Info: Собираем логи от: {', '.join(following_streamers)}.")
+    for streamer_ in streamersLogging:
+        path = f"{path_to_logs}{streamer_}\\{streamer_}-{date.today()}.log"
+        if not os.path.exists(path):
+            if not os.path.exists(f"{path_to_logs}{streamer_}"):
+                os.mkdir(f"{path_to_logs}{streamer_}")
+                GUI.print_logger(f"Info: Создаем папку логов {streamer_}.")
+            codecs.open(path, 'a+').write(f"# Starting {date.today()}\n")
+
     GUI.print_checker("$TYPE$Starting$TYPE$$MESS$Запускаем чеккер.$MESS$")
-    GUI.print_checker("$TYPE$Info$TYPE$$MESS$Слушаем https://cyberinquisitor414.glitch.me/LOGWIEWIERdb.$MESS$")
+    GUI.print_checker("$TYPE$Info$TYPE$$MESS$Слушаем: cyberinquisitor414.glitch.me $MESS$")
+    GUI.print_ircbot("$TYPE$Starting$TYPE$$MESS$Запускаем бота.$MESS$")
+    GUI.print_ircbot(f"$TYPE$Info$TYPE$$MESS$Заходим в чаты как: {bot_nick}")
 
 if loop:
-    GUI.after(500, func=logs_to_console)
+    GUI.after(100, func=logs_to_console)
     logger_thread.start()
     checker_thread.start()
+    ircbot_thread.start()
+
 GUI.protocol('WM_DELETE_WINDOW', withdraw_window)
 GUI.mainloop()
