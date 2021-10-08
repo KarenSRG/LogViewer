@@ -20,16 +20,3 @@ preStartInfo = []
 preStartExceptions = []
 following_streamers = []
 
-last_logLogger = ""
-last_logChecker = ""
-
-logged_messages = {}
-logged_messagesOLD = {}
-
-for streamer in streamersLogging:
-    logged_messages[streamer] = 0
-    logged_messagesOLD[streamer] = 0
-
-
-last_logLoggerOLD = ""
-last_logCheckerOLD = ""

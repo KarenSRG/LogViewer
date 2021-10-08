@@ -1,11 +1,8 @@
 {
-  "chatterino_folder": "B:\\Chatterino\\",
+  "streamers": ["insize","alcoreru","cemka", "elwycco", "gandreich", "mooniverse","shroud","unclebjorn","zaharchenk0"],
   "timedelta_from_UTC": 4,
   "path_to_logs": "C:\\Users\\Syuzi\\AppData\\Roaming\\Chatterino2\\Logs",
-  "proxy": {
-    "": ""
-  },
-  "irc_bot": 1,
-  "oauth": "oauth:11f2ako2oy8ol4u7cgb6swrvg9owgw"
+  "proxy": {"": ""},
+  "oauth": "oauth:11f2ako2oy8ol4u7cgb6swrvg9owgw",
+  "bot_nick": "kal_zer"
 }
-
